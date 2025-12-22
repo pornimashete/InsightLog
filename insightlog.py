@@ -143,8 +143,7 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
                         return_data += line
             return return_data
         except (IOError, EnvironmentError) as e:
-            print(e.strerror)
-            return None
+            raise Exception(f"Failed to read file '{filepath}': {e.strerror}")
     elif data:
         for line in data.splitlines():
             if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
@@ -234,8 +233,7 @@ def apply_filters(filters, data=None, filepath=None):
                         filtered_lines.append(line)
                 return ''.join(filtered_lines)
         except (IOError, EnvironmentError) as e:
-            print(e.strerror)
-            return None
+            raise Exception(f"Failed to read file '{filepath}': {e.strerror}")
     elif data:
         filtered_lines = []
         for line in data.splitlines():
@@ -274,8 +272,7 @@ def get_requests(service, data=None, filepath=None, filters=None):
                 with open(filepath, 'r') as f:
                     filtered_data = f.read()
             except (IOError, EnvironmentError) as e:
-                print(e.strerror)
-                return None
+                raise Exception(f"Failed to read file '{filepath}': {e.strerror}")
         else:
             filtered_data = data
     
