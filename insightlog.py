@@ -99,24 +99,29 @@ def get_service_settings(service_name):
         raise Exception("Service \""+service_name+"\" doesn't exists!")
 
 
-def get_date_filter(settings, minute=datetime.now().minute, hour=datetime.now().hour,
+def is_valid_hour(hour):
+    return hour is None or (isinstance(hour, int) and 0 <= hour <= 23)
+def is_valid_minute(minute):
+    return minute is None or (isinstance(minute, int) and 0 <= minute <= 59)
+def get_date_filter(settings, minute=None, hour=None,
                     day=datetime.now().day, month=datetime.now().month,
                     year=datetime.now().year):
     """Get the date pattern that can be used to filter data from logs based on the params"""
     if not is_valid_year(year) or not is_valid_month(month) or not is_valid_day(day) \
             or not is_valid_hour(hour) or not is_valid_minute(minute):
         raise Exception("Date elements aren't valid")
-    if minute != '*' and hour != '*':
+# invalid combination
+    if minute is not None and hour is None:
+        raise Exception("Minute cannot be set without hour")
+    if minute is not None and hour is not None:
         date_format = settings['dateminutes_format']
         date_filter = datetime(year, month, day, hour, minute).strftime(date_format)
-    elif minute == '*' and hour != '*':
+    elif hour is not None:
         date_format = settings['datehours_format']
         date_filter = datetime(year, month, day, hour).strftime(date_format)
-    elif minute == '*' and hour == '*':
+    else:
         date_format = settings['datedays_format']
         date_filter = datetime(year, month, day).strftime(date_format)
-    else:
-        raise Exception("Date elements aren't valid")
     return date_filter
 
 
@@ -143,8 +148,7 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
                         return_data += line
             return return_data
         except (IOError, EnvironmentError) as e:
-            print(e.strerror)
-            return None
+            raise Exception(f"Failed to read file '{filepath}': {e.strerror}")
     elif data:
         for line in data.splitlines():
             if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
@@ -234,8 +238,7 @@ def apply_filters(filters, data=None, filepath=None):
                         filtered_lines.append(line)
                 return ''.join(filtered_lines)
         except (IOError, EnvironmentError) as e:
-            print(e.strerror)
-            return None
+            raise Exception(f"Failed to read file '{filepath}': {e.strerror}")
     elif data:
         filtered_lines = []
         for line in data.splitlines():
@@ -274,8 +277,7 @@ def get_requests(service, data=None, filepath=None, filters=None):
                 with open(filepath, 'r') as f:
                     filtered_data = f.read()
             except (IOError, EnvironmentError) as e:
-                print(e.strerror)
-                return None
+                raise Exception(f"Failed to read file '{filepath}': {e.strerror}")
         else:
             filtered_data = data
     
