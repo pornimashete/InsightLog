@@ -1,6 +1,6 @@
 import re
 import calendar
-from datetime import datetime
+from datetime import datetime , timedelta
 
 # Service settings
 DEFAULT_NGINX = {
@@ -59,7 +59,7 @@ SERVICES_SWITCHER = {
     'auth': DEFAULT_AUTH
 }
 
-IPv4_REGEX = r'(\d+.\d+.\d+.\d+)'
+IPv4_REGEX = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
 AUTH_USER_INVALID_USER = r'(?i)invalid\suser\s(\w+)\s'
 AUTH_PASS_INVALID_USER = r'(?i)failed\spassword\sfor\s(\w+)\s'
 
@@ -128,13 +128,13 @@ def get_date_filter(settings, minute=None, hour=None,
 def check_match(line, filter_pattern, is_regex=False, is_casesensitive=True, is_reverse=False):
     """Check if line contains/matches filter pattern"""
     if is_regex:
-        check_result = re.match(filter_pattern, line) if is_casesensitive \
-            else re.match(filter_pattern, line, re.IGNORECASE)
+        check_result = re.search(filter_pattern, line) if is_casesensitive \
+            else re.search(filter_pattern, line, re.IGNORECASE)
     else:
         check_result = (filter_pattern in line) if is_casesensitive else (filter_pattern.lower() in line.lower())
     if is_reverse:
-        return not check_result
-    return check_result
+        return not bool(check_result)
+    return bool(check_result)
 
 
 def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_regex=False, is_reverse=False):
@@ -162,22 +162,36 @@ def _get_iso_datetime(str_date, pattern, keys):
     """Change raw datetime from logs to ISO 8601 format."""
     months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
     matches = re.findall(pattern, str_date)
+
     if not matches:
         raise ValueError(f"Date pattern '{pattern}' did not match '{str_date}'")
+    
     a_date = matches[0]
-    d_datetime = datetime(int(a_date[keys['year']]) if 'year' in keys else _get_auth_year(),
-                          months_dict[a_date[keys['month']]], int(a_date[keys['day']].strip()),
-                          int(a_date[keys['hour']]), int(a_date[keys['minute']]), int(a_date[keys['second']]))
-    return d_datetime.isoformat(' ')
+    now = datetime.now()
 
-
-def _get_auth_year():
-    """Return the year when the requests happened"""
-    if datetime.now().month == 1 and datetime.now().day == 1 and datetime.now().hour == 0:
-        return datetime.now().year - 1
+    # Determine year
+    if 'year' in keys:
+        year = int(a_date[keys['year']])
     else:
-        return datetime.now().year
+        # Auth logs don't contain year → assume current year 
+        year = now.year     
 
+    # Build datetime with assumed year
+    log_datetime = datetime(
+        year,
+        months_dict[a_date[keys['month']]],
+        int(a_date[keys['day']].strip()),
+        int(a_date[keys['hour']]),
+        int(a_date[keys['minute']]),
+        int(a_date[keys['second']])
+    )
+
+    # If auth log datetime is in the future, it must be from last year
+    # Allow small tolerance (e.g. 1 day) for clock skew
+    if 'year' not in keys and log_datetime > now + timedelta(days=1):
+        log_datetime = log_datetime.replace(year=year - 1)
+
+    return log_datetime.isoformat(' ')
 
 def get_web_requests(data, pattern, date_pattern=None, date_keys=None):
     """Analyze data (from the logs) and return list of requests formatted as the model (pattern) defined."""
